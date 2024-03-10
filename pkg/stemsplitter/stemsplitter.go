@@ -12,7 +12,7 @@ import (
 )
 
 func PullSpleeterImage(ctx context.Context, cli *client.Client) error {
-	spleeterImage := "deezer/spleeter"
+	spleeterImage := "deezer/spleeter:3.8-5stems"
 	reader, err := cli.ImagePull(ctx, spleeterImage, types.ImagePullOptions{})
 	if err != nil {
 		return err
