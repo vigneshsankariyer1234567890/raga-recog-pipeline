@@ -184,7 +184,7 @@ func TestSegmentAudio(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create base output directory: %v", err)
 	}
-	// defer os.RemoveAll(outputBaseDir)
+	defer os.RemoveAll(outputBaseDir)
 
 	errors := SegmentAudio(inputFilePath, segmentDuration, outputDir)
 
