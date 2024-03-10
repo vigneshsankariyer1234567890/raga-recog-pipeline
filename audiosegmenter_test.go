@@ -2,8 +2,10 @@ package audiosegmenter
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	ffmpeg_go "github.com/u2takey/ffmpeg-go"
@@ -168,4 +170,53 @@ func TestCopyAudioSegment_NegativeCases(t *testing.T) {
 			t.Errorf("Expected error for non-existent input file, but no error was returned")
 		}
 	}
+}
+
+func TestSegmentAudio(t *testing.T) {
+	inputDir := INPUT_DIR
+	outputBaseDir := OUTPUT_DIR
+	const segmentDuration = 30
+
+	inputFilePath := filepath.Join(inputDir, FILE_NAME)
+	outputDir := filepath.Join(outputBaseDir, "kiravani", fileNameWithoutExtension(FILE_NAME))
+
+	err := os.MkdirAll(outputDir, os.ModePerm)
+	if err != nil {
+		t.Fatalf("Failed to create base output directory: %v", err)
+	}
+	// defer os.RemoveAll(outputBaseDir)
+
+	errors := SegmentAudio(inputFilePath, segmentDuration, outputDir)
+
+	if len(errors) > 0 {
+		for _, err := range errors {
+			t.Errorf("Error while segmenting audio: %v", err)
+		}
+	}
+
+	probeOutput, _ := ffmpeg_go.Probe(inputFilePath)
+	duration, _ := ParseDuration(probeOutput)
+	expectedSegments := int(math.Ceil(duration / float64(segmentDuration)))
+
+	files, _ := os.ReadDir(outputDir)
+	if len(files) != expectedSegments {
+		t.Errorf("Expected %d segments, found %d", expectedSegments, len(files))
+	}
+
+	for i, file := range files {
+		segmentPath := filepath.Join(outputDir, file.Name())
+		segmentOutput, _ := ffmpeg_go.Probe(segmentPath)
+		segmentDuration, _ := ParseDuration(segmentOutput)
+
+		if i < expectedSegments-1 && segmentDuration != float64(segmentDuration) {
+			t.Errorf("Segment %d duration incorrect: got %v seconds, want %v seconds", i, segmentDuration, segmentDuration)
+		}
+		if i == expectedSegments-1 && segmentDuration > float64(segmentDuration) {
+			t.Errorf("Last segment duration too long: got %v seconds, want <= %v seconds", segmentDuration, segmentDuration)
+		}
+	}
+}
+
+func fileNameWithoutExtension(fp string) string {
+	return strings.TrimSuffix(filepath.Base(fp), filepath.Ext(fp))
 }
