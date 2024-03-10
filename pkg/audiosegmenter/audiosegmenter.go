@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"os"
 	"path/filepath"
 	"strconv"
 	"sync"
@@ -39,7 +40,13 @@ func ParseDuration(probeOutput string) (float64, error) {
 func CopyAudioSegment(inputFilePath string, segmentIdx int, segmentStart int, segmentDuration int, outputDir string) error {
 	filename := filepath.Base(inputFilePath)
 	filenameWithoutExt := filename[:len(filename)-len(filepath.Ext(filename))]
-	outputFilePath := fmt.Sprintf("%s/%s_seg_%d.mp3", outputDir, filenameWithoutExt, segmentIdx)
+
+	segmentDir := filepath.Join(outputDir, fmt.Sprintf("%s_seg_%d", filenameWithoutExt, segmentIdx))
+	if err := os.MkdirAll(segmentDir, os.ModePerm); err != nil {
+		return fmt.Errorf("failed to create segment directory %s: %w", segmentDir, err)
+	}
+
+	outputFilePath := filepath.Join(segmentDir, fmt.Sprintf("%s_seg_%d.mp3", filenameWithoutExt, segmentIdx))
 
 	err := ffmpeg_go.Input(inputFilePath).Output(outputFilePath, ffmpeg_go.KwArgs{
 		"ss": strconv.Itoa(segmentStart),

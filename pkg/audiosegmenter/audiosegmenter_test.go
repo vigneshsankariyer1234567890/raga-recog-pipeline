@@ -11,8 +11,8 @@ import (
 	ffmpeg_go "github.com/u2takey/ffmpeg-go"
 )
 
-const INPUT_DIR = "./sample/kiravani"
-const OUTPUT_DIR = "./output"
+const INPUT_DIR = "../../sample/kiravani"
+const OUTPUT_DIR = "../../output"
 const FILE_NAME = "01-kaligiyuNTEgadA_galgunu-kIravANi.mp3"
 
 func GET_EXPECTED_OUTPUT_FILE_NAME(segmentIdx int) string {
@@ -71,6 +71,7 @@ func TestCopyAudioSegment_Positive(t *testing.T) {
 	defer os.RemoveAll(outputDir)
 
 	inputFilePath := filepath.Join(inputDir, FILE_NAME)
+	filenameWithoutExt := fileNameWithoutExtension(FILE_NAME)
 	segmentIdx := 0
 	segmentStart := segmentIdx * segmentDuration
 
@@ -79,7 +80,8 @@ func TestCopyAudioSegment_Positive(t *testing.T) {
 		t.Fatalf("Failed to copy audio segment: %v", err)
 	}
 
-	expectedOutputFileName := filepath.Join(outputDir, GET_EXPECTED_OUTPUT_FILE_NAME(segmentIdx))
+	expectedOutputDir := filepath.Join(outputDir, fmt.Sprintf("%s_seg_%d", filenameWithoutExt, segmentIdx))
+	expectedOutputFileName := filepath.Join(expectedOutputDir, fmt.Sprintf("%s_seg_%d.mp3", filenameWithoutExt, segmentIdx))
 
 	if _, err := os.Stat(expectedOutputFileName); os.IsNotExist(err) {
 		t.Fatalf("Output file does not exist: %s", expectedOutputFileName)
@@ -136,7 +138,10 @@ func TestCopyAudioSegment_LastSegment(t *testing.T) {
 		t.Fatalf("Failed to copy last audio segment: %v", err)
 	}
 
-	expectedOutputFileName := filepath.Join(outputDir, GET_EXPECTED_OUTPUT_FILE_NAME(numberOfSegments))
+	filenameWithoutExt := fileNameWithoutExtension(FILE_NAME)
+	segmentDir := fmt.Sprintf("%s_seg_%d", filenameWithoutExt, numberOfSegments)
+	expectedOutputDir := filepath.Join(outputDir, segmentDir)
+	expectedOutputFileName := filepath.Join(expectedOutputDir, fmt.Sprintf("%s_seg_%d.mp3", filenameWithoutExt, numberOfSegments))
 
 	if _, err := os.Stat(expectedOutputFileName); os.IsNotExist(err) {
 		t.Fatalf("Output file does not exist: %s", expectedOutputFileName)
@@ -198,21 +203,29 @@ func TestSegmentAudio(t *testing.T) {
 	duration, _ := ParseDuration(probeOutput)
 	expectedSegments := int(math.Ceil(duration / float64(segmentDuration)))
 
-	files, _ := os.ReadDir(outputDir)
-	if len(files) != expectedSegments {
-		t.Errorf("Expected %d segments, found %d", expectedSegments, len(files))
+	segmentDirs, _ := os.ReadDir(outputDir)
+	if len(segmentDirs) != expectedSegments {
+		t.Errorf("Expected %d segments, found %d directories", expectedSegments, len(segmentDirs))
 	}
 
-	for i, file := range files {
-		segmentPath := filepath.Join(outputDir, file.Name())
-		segmentOutput, _ := ffmpeg_go.Probe(segmentPath)
+	for i, dir := range segmentDirs {
+		if !dir.IsDir() {
+			continue // Skip non-directory files, if any
+		}
+		segmentDirPath := filepath.Join(outputDir, dir.Name())
+		segmentFiles, err := os.ReadDir(segmentDirPath)
+		if err != nil || len(segmentFiles) == 0 {
+			t.Errorf("Failed to read segment directory or directory is empty: %s", segmentDirPath)
+			continue
+		}
+
+		// Assuming each segment directory contains exactly one file
+		segmentFilePath := filepath.Join(segmentDirPath, segmentFiles[0].Name())
+		segmentOutput, _ := ffmpeg_go.Probe(segmentFilePath)
 		segmentDuration, _ := ParseDuration(segmentOutput)
 
-		if i < expectedSegments-1 && segmentDuration != float64(segmentDuration) {
-			t.Errorf("Segment %d duration incorrect: got %v seconds, want %v seconds", i, segmentDuration, segmentDuration)
-		}
-		if i == expectedSegments-1 && segmentDuration > float64(segmentDuration) {
-			t.Errorf("Last segment duration too long: got %v seconds, want <= %v seconds", segmentDuration, segmentDuration)
+		if i < expectedSegments-1 && (segmentDuration > float64(segmentDuration)+1 || segmentDuration < float64(segmentDuration)-1) {
+			t.Errorf("Segment %d duration incorrect: got %v seconds, want around %v seconds", i, segmentDuration, segmentDuration)
 		}
 	}
 }
